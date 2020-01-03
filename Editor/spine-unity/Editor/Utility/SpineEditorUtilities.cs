@@ -1,8 +1,8 @@
 /******************************************************************************
  * Spine Runtimes License Agreement
- * Last updated May 1, 2019. Replaces all prior versions.
+ * Last updated January 1, 2020. Replaces all prior versions.
  *
- * Copyright (c) 2013-2019, Esoteric Software LLC
+ * Copyright (c) 2013-2020, Esoteric Software LLC
  *
  * Integration of the Spine Runtimes into software or otherwise creating
  * derivative works of the Spine Runtimes is permitted under the terms and
@@ -15,16 +15,16 @@
  * Spine Editor license and redistribution of the Products in any form must
  * include this license and copyright notice.
  *
- * THIS SOFTWARE IS PROVIDED BY ESOTERIC SOFTWARE LLC "AS IS" AND ANY EXPRESS
- * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN
- * NO EVENT SHALL ESOTERIC SOFTWARE LLC BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES, BUSINESS
- * INTERRUPTION, OR LOSS OF USE, DATA, OR PROFITS) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
- * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THE SPINE RUNTIMES ARE PROVIDED BY ESOTERIC SOFTWARE LLC "AS IS" AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL ESOTERIC SOFTWARE LLC BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES,
+ * BUSINESS INTERRUPTION, OR LOSS OF USE, DATA, OR PROFITS) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THE SPINE RUNTIMES, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *****************************************************************************/
 
 #pragma warning disable 0219
@@ -65,13 +65,27 @@ namespace Spine.Unity.Editor {
 		public static string editorPath = "";
 		public static string editorGUIPath = "";
 		public static bool initialized;
+		private static List<string> texturesWithoutMetaFile = new List<string>();
 
-		// Auto-import entry point
+		// Auto-import entry point for textures
+		void OnPreprocessTexture () {
+		#if UNITY_2018_1_OR_NEWER
+			bool customTextureSettingsExist = !assetImporter.importSettingsMissing;
+		#else
+			bool customTextureSettingsExist = System.IO.File.Exists(assetImporter.assetPath + ".meta");
+		#endif
+			if (!customTextureSettingsExist) {
+				texturesWithoutMetaFile.Add(assetImporter.assetPath);
+			}
+		}
+
+		// Auto-import post process entry point for all assets
 		static void OnPostprocessAllAssets (string[] imported, string[] deleted, string[] moved, string[] movedFromAssetPaths) {
 			if (imported.Length == 0)
 				return;
 
-			AssetUtility.HandleOnPostprocessAllAssets(imported);
+			AssetUtility.HandleOnPostprocessAllAssets(imported, texturesWithoutMetaFile);
+			texturesWithoutMetaFile.Clear();
 		}
 
 #region Initialization
@@ -80,22 +94,24 @@ namespace Spine.Unity.Editor {
 		}
 
 		static void Initialize () {
-			if (EditorApplication.isPlayingOrWillChangePlaymode) return;
-
+			// Note: Preferences need to be loaded when changing play mode
+			// to initialize handle scale correctly.
 			#if !NEW_PREFERENCES_SETTINGS_PROVIDER
 			Preferences.Load();
 			#else
 			SpinePreferences.Load();
 			#endif
 
+			if (EditorApplication.isPlayingOrWillChangePlaymode) return;
+
 			string[] assets = AssetDatabase.FindAssets("t:script SpineEditorUtilities");
 			string assetPath = AssetDatabase.GUIDToAssetPath(assets[0]);
-			editorPath = Path.GetDirectoryName(assetPath).Replace("\\", "/");
+			editorPath = Path.GetDirectoryName(assetPath).Replace('\\', '/');
 
 			assets = AssetDatabase.FindAssets("t:texture icon-subMeshRenderer");
 			if (assets.Length > 0) {
 				assetPath = AssetDatabase.GUIDToAssetPath(assets[0]);
-				editorGUIPath = Path.GetDirectoryName(assetPath).Replace("\\", "/");
+				editorGUIPath = Path.GetDirectoryName(assetPath).Replace('\\', '/');
 			}
 			else {
 				editorGUIPath = editorPath.Replace("/Utility", "/GUI");
@@ -188,7 +204,7 @@ namespace Spine.Unity.Editor {
 			if (MaterialChecks.IsTextureSetupProblematic(material, PlayerSettings.colorSpace,
 				texImporter. sRGBTexture, texImporter. mipmapEnabled, texImporter. alphaIsTransparency,
 				texturePath, materialPath, ref errorMessage)) {
-				Debug.LogWarning(errorMessage);
+				Debug.LogWarning(errorMessage, material);
 			}
 			return true;
 		}

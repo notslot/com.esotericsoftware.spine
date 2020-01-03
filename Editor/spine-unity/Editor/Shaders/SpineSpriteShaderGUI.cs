@@ -1,8 +1,8 @@
 /******************************************************************************
  * Spine Runtimes License Agreement
- * Last updated May 1, 2019. Replaces all prior versions.
+ * Last updated January 1, 2020. Replaces all prior versions.
  *
- * Copyright (c) 2013-2019, Esoteric Software LLC
+ * Copyright (c) 2013-2020, Esoteric Software LLC
  *
  * Integration of the Spine Runtimes into software or otherwise creating
  * derivative works of the Spine Runtimes is permitted under the terms and
@@ -15,16 +15,16 @@
  * Spine Editor license and redistribution of the Products in any form must
  * include this license and copyright notice.
  *
- * THIS SOFTWARE IS PROVIDED BY ESOTERIC SOFTWARE LLC "AS IS" AND ANY EXPRESS
- * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN
- * NO EVENT SHALL ESOTERIC SOFTWARE LLC BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES, BUSINESS
- * INTERRUPTION, OR LOSS OF USE, DATA, OR PROFITS) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
- * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THE SPINE RUNTIMES ARE PROVIDED BY ESOTERIC SOFTWARE LLC "AS IS" AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL ESOTERIC SOFTWARE LLC BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES,
+ * BUSINESS INTERRUPTION, OR LOSS OF USE, DATA, OR PROFITS) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THE SPINE RUNTIMES, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *****************************************************************************/
 
 using UnityEngine;
@@ -33,11 +33,18 @@ using Spine.Unity;
 
 using SpineInspectorUtility = Spine.Unity.Editor.SpineInspectorUtility;
 
-public class SpineSpriteShaderGUI : ShaderGUI {
+public class SpineSpriteShaderGUI : SpineShaderWithOutlineGUI {
 	static readonly string kShaderVertexLit = "Spine/Sprite/Vertex Lit";
 	static readonly string kShaderPixelLit = "Spine/Sprite/Pixel Lit";
 	static readonly string kShaderUnlit = "Spine/Sprite/Unlit";
-	static readonly string kShaderLitLW = "Universal Render Pipeline/Spine/Sprite";
+
+	static readonly string kShaderVertexLitOutline = "Spine/Outline/Sprite/Vertex Lit";
+	static readonly string kShaderPixelLitOutline = "Spine/Outline/Sprite/Pixel Lit";
+	static readonly string kShaderUnlitOutline = "Spine/Outline/Sprite/Unlit";
+
+	static readonly string kShaderLitLW = "Lightweight Render Pipeline/Spine/Sprite";
+	static readonly string kShaderLitURP = "Universal Render Pipeline/Spine/Sprite";
+	static readonly string kShaderLitURP2D = "Universal Render Pipeline/2D/Spine/Sprite";
 	static readonly int kSolidQueue = 2000;
 	static readonly int kAlphaTestQueue = 2450;
 	static readonly int kTransparentQueue = 3000;
@@ -56,7 +63,9 @@ public class SpineSpriteShaderGUI : ShaderGUI {
 		VertexLit,
 		PixelLit,
 		Unlit,
-		LitUniversal
+		LitLightweight,
+		LitUniversal,
+		LitUniversal2D
 	};
 
 	private enum eCulling {
@@ -71,10 +80,9 @@ public class SpineSpriteShaderGUI : ShaderGUI {
 		FixedNormalsModelSpace = 1,
 	};
 
-	MaterialEditor _materialEditor;
-
 	MaterialProperty _mainTexture = null;
 	MaterialProperty _color = null;
+	MaterialProperty _maskTexture = null;
 
 	MaterialProperty _pixelSnap = null;
 
@@ -111,6 +119,7 @@ public class SpineSpriteShaderGUI : ShaderGUI {
 	MaterialProperty _smoothnessScale = null;
 
 	static GUIContent _albedoText = new GUIContent("Albedo", "Albedo (RGB) and Transparency (A)");
+	static GUIContent _maskText = new GUIContent("Light Mask", "Light mask texture (secondary Sprite texture)");
 	static GUIContent _altAlbedoText = new GUIContent("Secondary Albedo", "When a secondary albedo texture is set the albedo will be a blended mix of the two textures based on the blend value.");
 	static GUIContent _metallicMapText = new GUIContent("Metallic", "Metallic (R) and Smoothness (A)");
 	static GUIContent _smoothnessText = new GUIContent("Smoothness", "Smoothness value");
@@ -133,7 +142,9 @@ public class SpineSpriteShaderGUI : ShaderGUI {
 		new GUIContent("Vertex Lit"),
 		new GUIContent("Pixel Lit"),
 		new GUIContent("Unlit"),
-		new GUIContent("Lit Universal")
+		new GUIContent("Lit Lightweight"),
+		new GUIContent("Lit Universal"),
+		new GUIContent("Lit Universal2D")
 	};
 	static GUIContent _blendModeText = new GUIContent("Blend Mode", "Blend Mode");
 	static GUIContent[] _blendModeOptions = {
@@ -184,7 +195,10 @@ public class SpineSpriteShaderGUI : ShaderGUI {
 
 		//If not originally a sprite shader set default keywords
 		if (oldShader.name != kShaderVertexLit && oldShader.name != kShaderPixelLit && oldShader.name != kShaderUnlit &&
-			oldShader.name != kShaderLitLW) {
+			oldShader.name != kShaderVertexLitOutline && oldShader.name != kShaderPixelLitOutline && oldShader.name != kShaderUnlitOutline &&
+			oldShader.name != kShaderLitLW &&
+			oldShader.name != kShaderLitURP &&
+			oldShader.name != kShaderLitURP2D) {
 			SetDefaultSpriteKeywords(material, newShader);
 		}
 
@@ -195,8 +209,11 @@ public class SpineSpriteShaderGUI : ShaderGUI {
 
 	#region Virtual Interface
 
-	protected virtual void FindProperties (MaterialProperty[] props) {
+	protected override void FindProperties (MaterialProperty[] props) {
+		base.FindProperties(props);
+
 		_mainTexture = FindProperty("_MainTex", props);
+		_maskTexture = FindProperty("_MaskTex", props, false);
 		_color = FindProperty("_Color", props);
 
 		_pixelSnap = FindProperty("PixelSnap", props);
@@ -293,6 +310,16 @@ public class SpineSpriteShaderGUI : ShaderGUI {
 			dataChanged |= RenderRimLightingProperties();
 		}
 
+		{
+			EditorGUILayout.Space();
+			RenderStencilProperties();
+		}
+
+		{
+			EditorGUILayout.Space();
+			RenderOutlineProperties();
+		}
+
 		if (dataChanged) {
 			MaterialChanged(_materialEditor);
 		}
@@ -330,9 +357,17 @@ public class SpineSpriteShaderGUI : ShaderGUI {
 						if (material.shader.name != kShaderUnlit)
 							_materialEditor.SetShader(Shader.Find(kShaderUnlit), false);
 						break;
-					case eLightMode.LitUniversal:
+					case eLightMode.LitLightweight:
 						if (material.shader.name != kShaderLitLW)
 							_materialEditor.SetShader(Shader.Find(kShaderLitLW), false);
+						break;
+					case eLightMode.LitUniversal:
+						if (material.shader.name != kShaderLitURP)
+							_materialEditor.SetShader(Shader.Find(kShaderLitURP), false);
+						break;
+					case eLightMode.LitUniversal2D:
+						if (material.shader.name != kShaderLitURP2D)
+							_materialEditor.SetShader(Shader.Find(kShaderLitURP2D), false);
 						break;
 					}
 				}
@@ -407,6 +442,9 @@ public class SpineSpriteShaderGUI : ShaderGUI {
 
 		if (_bumpMap != null)
 			_materialEditor.TexturePropertySingleLine(_normalMapText, _bumpMap, _bumpMap.textureValue != null ? _bumpScale : null);
+
+		if (_maskTexture != null)
+			_materialEditor.TexturePropertySingleLine(_maskText, _maskTexture);
 
 		if (_diffuseRamp != null)
 			_materialEditor.TexturePropertySingleLine(_diffuseRampText, _diffuseRamp);
@@ -580,7 +618,8 @@ public class SpineSpriteShaderGUI : ShaderGUI {
 		_materialEditor.RangeProperty(_shadowAlphaCutoff, _shadowAlphaCutoffText.text);
 		dataChanged = EditorGUI.EndChangeCheck();
 		bool areMixedShaders = false;
-		bool hasReceiveShadowsParameter = IsLWRPShader(_materialEditor, out areMixedShaders);
+		bool hasReceiveShadowsParameter = IsLWRPShader(_materialEditor, out areMixedShaders) ||
+			IsURP3DShader(_materialEditor, out areMixedShaders);
 
 		if (hasReceiveShadowsParameter) {
 			bool forceDisableReceiveShadows = !_writeToDepth.hasMixedValue && _writeToDepth.floatValue == 0;
@@ -608,7 +647,9 @@ public class SpineSpriteShaderGUI : ShaderGUI {
 
 		bool areMixedShaders = false;
 		bool isLWRPShader = IsLWRPShader(_materialEditor, out areMixedShaders);
-		bool hasSHParameter = areMixedShaders || !isLWRPShader;
+		bool isURP3DShader = IsURP3DShader(_materialEditor, out areMixedShaders);
+		bool isURP2DShader = IsURP2DShader(_materialEditor, out areMixedShaders);
+		bool hasSHParameter = !(isLWRPShader || isURP3DShader || isURP2DShader);
 		if (!hasSHParameter)
 			return false;
 
@@ -628,6 +669,13 @@ public class SpineSpriteShaderGUI : ShaderGUI {
 	}
 
 	protected virtual bool RenderFogProperties () {
+
+		bool areMixedShaders = false;
+		bool isURP2DShader = IsURP2DShader(_materialEditor, out areMixedShaders);
+
+		if (isURP2DShader && !areMixedShaders)
+			return false;
+
 		EditorGUI.BeginChangeCheck();
 		bool mixedValue;
 		bool fog = IsKeywordEnabled(_materialEditor, "_FOG", out mixedValue);
@@ -882,18 +930,30 @@ public class SpineSpriteShaderGUI : ShaderGUI {
 	}
 
 	static bool IsLWRPShader (MaterialEditor editor, out bool mixedValue) {
+		return IsShaderType(kShaderLitLW, editor, out mixedValue);
+	}
+
+	static bool IsURP3DShader (MaterialEditor editor, out bool mixedValue) {
+		return IsShaderType(kShaderLitURP, editor, out mixedValue);
+	}
+
+	static bool IsURP2DShader (MaterialEditor editor, out bool mixedValue) {
+		return IsShaderType(kShaderLitURP2D, editor, out mixedValue);
+	}
+
+	static bool IsShaderType (string shaderType, MaterialEditor editor, out bool mixedValue) {
 
 		mixedValue = false;
-		bool isAnyLWRPShader = false;
+		bool isAnyTargetTypeShader = false;
 		foreach (Material material in editor.targets) {
-			if (material.shader.name == kShaderLitLW) {
-				isAnyLWRPShader = true;
+			if (material.shader.name == shaderType) {
+				isAnyTargetTypeShader = true;
 			}
-			else if (isAnyLWRPShader) {
+			else if (isAnyTargetTypeShader) {
 				mixedValue = true;
 			}
 		}
-		return isAnyLWRPShader;
+		return isAnyTargetTypeShader;
 	}
 
 	static bool IsKeywordEnabled (MaterialEditor editor, string keyword, out bool mixedValue) {
@@ -911,16 +971,24 @@ public class SpineSpriteShaderGUI : ShaderGUI {
 	}
 
 	static eLightMode GetMaterialLightMode (Material material) {
-		if (material.shader.name == kShaderPixelLit) {
+		if (material.shader.name == kShaderPixelLit ||
+			material.shader.name == kShaderPixelLitOutline) {
 			return eLightMode.PixelLit;
 		}
-		else if (material.shader.name == kShaderUnlit) {
+		else if (material.shader.name == kShaderUnlit ||
+				material.shader.name == kShaderUnlitOutline) {
 			return eLightMode.Unlit;
 		}
 		else if (material.shader.name == kShaderLitLW) {
+			return eLightMode.LitLightweight;
+		}
+		else if (material.shader.name == kShaderLitURP) {
 			return eLightMode.LitUniversal;
 		}
-		else { // if (material.shader.name == kShaderVertexLit)
+		else if (material.shader.name == kShaderLitURP2D) {
+			return eLightMode.LitUniversal2D;
+		}
+		else { // if (material.shader.name == kShaderVertexLit || kShaderVertexLitOutline)
 			return eLightMode.VertexLit;
 		}
 	}

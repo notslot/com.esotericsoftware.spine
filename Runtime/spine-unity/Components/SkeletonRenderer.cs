@@ -1,8 +1,8 @@
 /******************************************************************************
  * Spine Runtimes License Agreement
- * Last updated May 1, 2019. Replaces all prior versions.
+ * Last updated January 1, 2020. Replaces all prior versions.
  *
- * Copyright (c) 2013-2019, Esoteric Software LLC
+ * Copyright (c) 2013-2020, Esoteric Software LLC
  *
  * Integration of the Spine Runtimes into software or otherwise creating
  * derivative works of the Spine Runtimes is permitted under the terms and
@@ -15,16 +15,16 @@
  * Spine Editor license and redistribution of the Products in any form must
  * include this license and copyright notice.
  *
- * THIS SOFTWARE IS PROVIDED BY ESOTERIC SOFTWARE LLC "AS IS" AND ANY EXPRESS
- * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN
- * NO EVENT SHALL ESOTERIC SOFTWARE LLC BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
- * BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES, BUSINESS
- * INTERRUPTION, OR LOSS OF USE, DATA, OR PROFITS) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
- * NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
- * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * THE SPINE RUNTIMES ARE PROVIDED BY ESOTERIC SOFTWARE LLC "AS IS" AND ANY
+ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL ESOTERIC SOFTWARE LLC BE LIABLE FOR ANY
+ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES,
+ * BUSINESS INTERRUPTION, OR LOSS OF USE, DATA, OR PROFITS) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+ * THE SPINE RUNTIMES, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *****************************************************************************/
 
 #if UNITY_2018_3 || UNITY_2019 || UNITY_2018_3_OR_NEWER
@@ -61,6 +61,15 @@ namespace Spine.Unity {
 		/// <summary>Skin name to use when the Skeleton is initialized.</summary>
 		[SerializeField] [SpineSkin(defaultAsEmptyString:true)] public string initialSkinName;
 
+		/// <summary>Enable this parameter when overwriting the Skeleton's skin from an editor script.
+		/// Otherwise any changes will be overwritten by the next inspector update.</summary>
+		#if UNITY_EDITOR
+		public bool EditorSkipSkinSync {
+			get { return editorSkipSkinSync; }
+			set { editorSkipSkinSync = value; }
+		}
+		protected bool editorSkipSkinSync = false;
+		#endif
 		/// <summary>Flip X and Y to use when the Skeleton is initialized.</summary>
 		[SerializeField] public bool initialFlipX, initialFlipY;
 		#endregion
@@ -96,8 +105,9 @@ namespace Spine.Unity {
 
 		#if PER_MATERIAL_PROPERTY_BLOCKS
 		/// <summary> Applies only when 3+ submeshes are used (2+ materials with alternating order, e.g. "A B A").
-		/// If true, MaterialPropertyBlocks are assigned at each material to prevent aggressive batching of submeshes
-		/// by e.g. the LWRP renderer, leading to incorrect draw order (e.g. "A1 B A2" changed to "A1A2 B").
+		/// If true, GPU instancing is disabled at all materials and MaterialPropertyBlocks are assigned at each
+		/// material to prevent aggressive batching of submeshes by e.g. the LWRP renderer, leading to incorrect
+		/// draw order (e.g. "A1 B A2" changed to "A1A2 B").
 		/// You can disable this parameter when everything is drawn correctly to save the additional performance cost.
 		/// </summary>
 		public bool fixDrawOrder = false;
@@ -117,6 +127,14 @@ namespace Spine.Unity {
 
 		[System.Serializable]
 		public class SpriteMaskInteractionMaterials {
+			public bool AnyMaterialCreated {
+				get {
+					return materialsMaskDisabled.Length > 0 ||
+						materialsInsideMask.Length > 0 ||
+						materialsOutsideMask.Length > 0;
+				}
+			}
+
 			/// <summary>Material references for switching material sets at runtime when <see cref="SkeletonRenderer.maskInteraction"/> changes to <see cref="SpriteMaskInteraction.None"/>.</summary>
 			public Material[] materialsMaskDisabled = new Material[0];
 			/// <summary>Material references for switching material sets at runtime when <see cref="SkeletonRenderer.maskInteraction"/> changes to <see cref="SpriteMaskInteraction.VisibleInsideMask"/>.</summary>
@@ -279,12 +297,8 @@ namespace Spine.Unity {
 
 			// Clear
 			{
-				if (meshFilter != null)
-					meshFilter.sharedMesh = null;
-
-				meshRenderer = GetComponent<MeshRenderer>();
-				if (meshRenderer != null && meshRenderer.enabled) meshRenderer.sharedMaterial = null;
-
+				// Note: do not reset meshFilter.sharedMesh or meshRenderer.sharedMaterial to null,
+				// otherwise constant reloading will be triggered at prefabs.
 				currentInstructions.Clear();
 				rendererBuffers.Clear();
 				meshGenerator.Begin();
@@ -334,6 +348,15 @@ namespace Spine.Unity {
 		public virtual void LateUpdate () {
 			if (!valid) return;
 
+			#if UNITY_EDITOR && NEW_PREFAB_SYSTEM
+			// Don't store mesh or material at the prefab, otherwise it will permanently reload
+			var prefabType = UnityEditor.PrefabUtility.GetPrefabAssetType(this);
+			if (!UnityEditor.PrefabUtility.IsPartOfPrefabInstance(this) &&
+				(prefabType == UnityEditor.PrefabAssetType.Regular || prefabType == UnityEditor.PrefabAssetType.Variant)) {
+				return;
+			}
+			#endif
+
 			#if SPINE_OPTIONAL_RENDEROVERRIDE
 			bool doMeshOverride = generateMeshOverride != null;
 			if ((!meshRenderer.enabled)	&& !doMeshOverride) return;
@@ -379,17 +402,17 @@ namespace Spine.Unity {
 				MeshGenerator.GenerateSkeletonRendererInstruction(currentInstructions, skeleton, customSlotMaterials, separatorSlots, doMeshOverride, this.immutableTriangles);
 
 				// STEP 1.9. Post-process workingInstructions. ==================================================================================
-				#if SPINE_OPTIONAL_MATERIALOVERRIDE
+#if SPINE_OPTIONAL_MATERIALOVERRIDE
 				if (customMaterialOverride.Count > 0) // isCustomMaterialOverridePopulated
 					MeshGenerator.TryReplaceMaterials(workingSubmeshInstructions, customMaterialOverride);
-				#endif
+#endif
 
-				#if SPINE_OPTIONAL_RENDEROVERRIDE
+#if SPINE_OPTIONAL_RENDEROVERRIDE
 				if (doMeshOverride) {
 					this.generateMeshOverride(currentInstructions);
 					if (disableRenderingOnOverride) return;
 				}
-				#endif
+#endif
 
 				updateTriangles = SkeletonRendererInstruction.GeometryNotEqual(currentInstructions, currentSmartMesh.instructionUsed);
 
@@ -417,11 +440,15 @@ namespace Spine.Unity {
 
 			rendererBuffers.UpdateSharedMaterials(workingSubmeshInstructions);
 
+			bool materialsChanged = rendererBuffers.MaterialsChangedInLastUpdate();
 			if (updateTriangles) { // Check if the triangles should also be updated.
 				meshGenerator.FillTriangles(currentMesh);
 				meshRenderer.sharedMaterials = rendererBuffers.GetUpdatedSharedMaterialsArray();
-			} else if (rendererBuffers.MaterialsChangedInLastUpdate()) {
+			} else if (materialsChanged) {
 				meshRenderer.sharedMaterials = rendererBuffers.GetUpdatedSharedMaterialsArray();
+			}
+			if (materialsChanged && (this.maskMaterials.AnyMaterialCreated)) {
+				this.maskMaterials = new SpriteMaskInteractionMaterials();
 			}
 
 			meshGenerator.FillLateVertexData(currentMesh);
@@ -438,7 +465,7 @@ namespace Spine.Unity {
 
 			#if PER_MATERIAL_PROPERTY_BLOCKS
 			if (fixDrawOrder && meshRenderer.sharedMaterials.Length > 2) {
-				SetDrawOrderMaterialPropertyBlocks();
+				SetMaterialSettingsToFixDrawOrder();
 			}
 			#endif
 		}
@@ -511,6 +538,11 @@ namespace Spine.Unity {
 				EditorFixStencilCompParameters();
 			}
 			#endif
+
+			if (Application.isPlaying) {
+				if (maskInteraction != SpriteMaskInteraction.None && maskMaterials.materialsMaskDisabled.Length == 0)
+					maskMaterials.materialsMaskDisabled = meshRenderer.sharedMaterials;
+			}
 
 			if (maskMaterials.materialsMaskDisabled.Length > 0 && maskMaterials.materialsMaskDisabled[0] != null &&
 				maskInteraction == SpriteMaskInteraction.None) {
@@ -610,9 +642,9 @@ namespace Spine.Unity {
 		/// Otherwise, e.g. when using Lightweight Render Pipeline, deliberately separated draw calls
 		/// "A1 B A2" are reordered to "A1A2 B", regardless of batching-related project settings.
 		/// </summary>
-		private void SetDrawOrderMaterialPropertyBlocks() {
+		private void SetMaterialSettingsToFixDrawOrder() {
 			if (reusedPropertyBlock == null) reusedPropertyBlock = new MaterialPropertyBlock();
-			
+
 			bool hasPerRendererBlock = meshRenderer.HasPropertyBlock();
 			if (hasPerRendererBlock) {
 				meshRenderer.GetPropertyBlock(reusedPropertyBlock);
@@ -624,6 +656,8 @@ namespace Spine.Unity {
 				// material instances (not in terms of memory cost or leakage).
 				reusedPropertyBlock.SetFloat(SUBMESH_DUMMY_PARAM_ID, i);
 				meshRenderer.SetPropertyBlock(reusedPropertyBlock, i);
+
+				meshRenderer.sharedMaterials[i].enableInstancing = false;
 			}
 		}
 		#endif
