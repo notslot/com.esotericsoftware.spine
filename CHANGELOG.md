@@ -216,6 +216,8 @@
     * **Example:** You can find an example scene in the package under `com.esotericsoftware.spine.urp-shaders-3.8/Examples/URP Shaders.unity` that demonstrates usage of the URP shaders.
   * Spine Preferences now provide an **`Atlas Texture Settings`** parameter for applying customizable texture import settings at all newly imported Spine atlas textures.
     When exporting atlas textures from Spine with `Premultiply alpha` enabled (the default), you can leave it at `PMATexturePreset`. If you have disabled `Premultiply alpha`, set it to the included `StraightAlphaTexturePreset` asset. You can also create your own `TextureImporter` `Preset` asset and assign it here (include `PMA` or `Straight` in the name). In Unity versions before 2018.3 you can use `Texture2D` template assets instead of the newer `Preset` assets. Materials created for imported textures will also have the `Straight Alpha Texture` parameter configured accordingly.
+  * All `Sprite` shaders (including URP and LWRP extension packages) now provide an additional `Fixed Normal Space` option `World-Space`. PReviously options were limited to `View-Space` and `Model-Space`.
+  * `SkeletonGraphic` now fully supports [`SkeletonUtility`](http://esotericsoftware.com/spine-unity#SkeletonUtility) for generating a hierarchy of [`SkeletonUtilityBones`](http://esotericsoftware.com/spine-unity#SkeletonUtilityBone) in both modes `Follow` and `Override`. This also enables creating hinge chain physics rigs and using `SkeletonUtilityConstraints` such as `SkeletonUtilityGroundConstraint` and `SkeletonUtilityEyeConstraint` on `SkeletonGraphic`.
 
 * **Changes of default values**
   * `SkeletonMecanim`'s `Layer Mix Mode` now defaults to `MixMode.MixNext` instead of `MixMode.MixAlways`.
@@ -253,6 +255,7 @@
 * Updated to latest MonoGame version 3.7.1
 * Rewrote example project to be cleaner and better demonstrate basic Spine features.
 * Added mix-and-match example to demonstrate the new Skin API.
+* Added normalmap support via `SpineEffectNormalmap` and support for loading multiple texture layers following a suffix-pattern. Please see the example code on how to use them.
 
 ## Java
 * **Breaking changes**

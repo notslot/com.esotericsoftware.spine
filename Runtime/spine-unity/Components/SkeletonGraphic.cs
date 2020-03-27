@@ -59,6 +59,7 @@ namespace Spine.Unity {
 		public bool freeze;
 		public bool unscaledTime;
 
+		private bool wasUpdatedAfterInit = true;
 		private Texture baseTexture = null;
 
 		#if UNITY_EDITOR
@@ -212,9 +213,12 @@ namespace Spine.Unity {
 			}
 
 			if (UpdateComplete != null) UpdateComplete(this);
+			wasUpdatedAfterInit = true;
 		}
 
 		public void LateUpdate () {
+			// instantiation can happen from Update() after this component, leading to a missing Update() call.
+			if (!wasUpdatedAfterInit) Update(0);
 			if (freeze) return;
 			//this.SetVerticesDirty(); // Which is better?
 			UpdateMesh();
@@ -226,6 +230,11 @@ namespace Spine.Unity {
 		public Skeleton Skeleton { get { return skeleton; } set { skeleton = value; } }
 		public SkeletonData SkeletonData { get { return skeleton == null ? null : skeleton.data; } }
 		public bool IsValid { get { return skeleton != null; } }
+
+		public delegate void SkeletonRendererDelegate (SkeletonGraphic skeletonGraphic);
+
+		/// <summary>OnRebuild is raised after the Skeleton is successfully initialized.</summary>
+		public event SkeletonRendererDelegate OnRebuild;
 
 		protected Spine.AnimationState state;
 		public Spine.AnimationState AnimationState { get { return state; } }
@@ -308,6 +317,7 @@ namespace Spine.Unity {
 			if (!string.IsNullOrEmpty(initialSkinName))
 				skeleton.SetSkin(initialSkinName);
 
+			wasUpdatedAfterInit = false;
 			if (!string.IsNullOrEmpty(startingAnimation)) {
 				var animationObject = skeletonDataAsset.GetSkeletonData(false).FindAnimation(startingAnimation);
 				if (animationObject != null) {
@@ -316,10 +326,11 @@ namespace Spine.Unity {
 					if (!Application.isPlaying)
 						Update(0f);
 					#endif
-					if (freeze)
-						Update(0f);
 				}
 			}
+
+			if (OnRebuild != null)
+				OnRebuild(this);
 		}
 
 		public void UpdateMesh () {
@@ -332,7 +343,7 @@ namespace Spine.Unity {
 			bool updateTriangles = SkeletonRendererInstruction.GeometryNotEqual(currentInstructions, smartMesh.instructionUsed);
 
 			meshGenerator.Begin();
-			if (currentInstructions.hasActiveClipping) {
+			if (currentInstructions.hasActiveClipping && currentInstructions.submeshInstructions.Count > 0) {
 				meshGenerator.AddSubmesh(currentInstructions.submeshInstructions.Items[0], updateTriangles);
 			} else {
 				meshGenerator.BuildMeshWithArrays(currentInstructions, updateTriangles);
