@@ -41,13 +41,13 @@ namespace Spine.Unity {
 	#else
 	[ExecuteInEditMode]
 	#endif
-	[HelpURL("http://esotericsoftware.com/spine-unity#BoundingBoxFollower")]
-	public class BoundingBoxFollower : MonoBehaviour {
+	[HelpURL("http://esotericsoftware.com/spine-unity#BoundingBoxFollowerGraphic")]
+	public class BoundingBoxFollowerGraphic : MonoBehaviour {
 		internal static bool DebugMessages = true;
 
 		#region Inspector
-		public SkeletonRenderer skeletonRenderer;
-		[SpineSlot(dataField: "skeletonRenderer", containsBoundingBoxes: true)]
+		public SkeletonGraphic skeletonGraphic;
+		[SpineSlot(dataField: "skeletonGraphic", containsBoundingBoxes: true)]
 		public string slotName;
 		public bool isTrigger;
 		public bool clearStateOnDisable = true;
@@ -72,26 +72,26 @@ namespace Spine.Unity {
 		}
 
 		void OnEnable () {
-			if (skeletonRenderer != null) {
-				skeletonRenderer.OnRebuild -= HandleRebuild;
-				skeletonRenderer.OnRebuild += HandleRebuild;
+			if (skeletonGraphic != null) {
+				skeletonGraphic.OnRebuild -= HandleRebuild;
+				skeletonGraphic.OnRebuild += HandleRebuild;
 			}
 
 			Initialize();
 		}
 
-		void HandleRebuild (SkeletonRenderer sr) {
-			//if (BoundingBoxFollower.DebugMessages) Debug.Log("Skeleton was rebuilt. Repopulating BoundingBoxFollower.");
+		void HandleRebuild (SkeletonGraphic sr) {
+			//if (BoundingBoxFollowerGraphic.DebugMessages) Debug.Log("Skeleton was rebuilt. Repopulating BoundingBoxFollowerGraphic.");
 			Initialize();
 		}
 
 		/// <summary>
-		/// Initialize and instantiate the BoundingBoxFollower colliders. This is method checks if the BoundingBoxFollower has already been initialized for the skeleton instance and slotName and prevents overwriting unless it detects a new setup.</summary>
+		/// Initialize and instantiate the BoundingBoxFollowerGraphic colliders. This is method checks if the BoundingBoxFollowerGraphic has already been initialized for the skeleton instance and slotName and prevents overwriting unless it detects a new setup.</summary>
 		public void Initialize (bool overwrite = false) {
-			if (skeletonRenderer == null)
+			if (skeletonGraphic == null)
 				return;
 
-			skeletonRenderer.Initialize(false);
+			skeletonGraphic.Initialize(false);
 
 			if (string.IsNullOrEmpty(slotName))
 				return;
@@ -101,7 +101,7 @@ namespace Spine.Unity {
 				&&
 				colliderTable.Count > 0 && slot != null			// Slot is set and colliders already populated.
 				&&
-				skeletonRenderer.skeleton == slot.Skeleton		// Skeleton object did not change.
+				skeletonGraphic.Skeleton == slot.Skeleton		// Skeleton object did not change.
 				&&
 				slotName == slot.data.name						// Slot object did not change.
 			)
@@ -114,30 +114,34 @@ namespace Spine.Unity {
 			colliderTable.Clear();
 			nameTable.Clear();
 
-			var skeleton = skeletonRenderer.skeleton;
+			var skeleton = skeletonGraphic.Skeleton;
 			if (skeleton == null)
 				return;
 			slot = skeleton.FindSlot(slotName);
 			int slotIndex = skeleton.FindSlotIndex(slotName);
 
 			if (slot == null) {
-				if (BoundingBoxFollower.DebugMessages)
-					Debug.LogWarning(string.Format("Slot '{0}' not found for BoundingBoxFollower on '{1}'. (Previous colliders were disposed.)", slotName, this.gameObject.name));
+				if (BoundingBoxFollowerGraphic.DebugMessages)
+					Debug.LogWarning(string.Format("Slot '{0}' not found for BoundingBoxFollowerGraphic on '{1}'. (Previous colliders were disposed.)", slotName, this.gameObject.name));
 				return;
 			}
 
 			int requiredCollidersCount = 0;
 			var colliders = GetComponents<PolygonCollider2D>();
 			if (this.gameObject.activeInHierarchy) {
+				var canvas = skeletonGraphic.canvas;
+				if (canvas == null) canvas = skeletonGraphic.GetComponentInParent<Canvas>();
+				float scale = canvas != null ? canvas.referencePixelsPerUnit : 100.0f;
+
 				foreach (var skin in skeleton.Data.Skins)
-					AddCollidersForSkin(skin, slotIndex, colliders, ref requiredCollidersCount);
+					AddCollidersForSkin(skin, slotIndex, colliders, scale, ref requiredCollidersCount);
 
 				if (skeleton.skin != null)
-					AddCollidersForSkin(skeleton.skin, slotIndex, colliders, ref requiredCollidersCount);
+					AddCollidersForSkin(skeleton.skin, slotIndex, colliders, scale, ref requiredCollidersCount);
 			}
 			DisposeExcessCollidersAfter(requiredCollidersCount);
 
-			if (BoundingBoxFollower.DebugMessages) {
+			if (BoundingBoxFollowerGraphic.DebugMessages) {
 				bool valid = colliderTable.Count != 0;
 				if (!valid) {
 					if (this.gameObject.activeInHierarchy)
@@ -148,7 +152,7 @@ namespace Spine.Unity {
 			}
 		}
 
-		void AddCollidersForSkin (Skin skin, int slotIndex, PolygonCollider2D[] previousColliders, ref int collidersCount) {
+		void AddCollidersForSkin (Skin skin, int slotIndex, PolygonCollider2D[] previousColliders, float scale, ref int collidersCount) {
 			if (skin == null) return;
 			var skinEntries = new List<Skin.SkinEntry>();
 			skin.GetAttachments(slotIndex, skinEntries);
@@ -157,15 +161,15 @@ namespace Spine.Unity {
 				var attachment = skin.GetAttachment(slotIndex, entry.Name);
 				var boundingBoxAttachment = attachment as BoundingBoxAttachment;
 
-				if (BoundingBoxFollower.DebugMessages && attachment != null && boundingBoxAttachment == null)
-					Debug.Log("BoundingBoxFollower tried to follow a slot that contains non-boundingbox attachments: " + slotName);
+				if (BoundingBoxFollowerGraphic.DebugMessages && attachment != null && boundingBoxAttachment == null)
+					Debug.Log("BoundingBoxFollowerGraphic tried to follow a slot that contains non-boundingbox attachments: " + slotName);
 
 				if (boundingBoxAttachment != null) {
 					if (!colliderTable.ContainsKey(boundingBoxAttachment)) {
 						var bbCollider = collidersCount < previousColliders.Length ?
 							previousColliders[collidersCount] : gameObject.AddComponent<PolygonCollider2D>();
 						++collidersCount;
-						SkeletonUtility.SetColliderPointsLocal(bbCollider, slot, boundingBoxAttachment);
+						SkeletonUtility.SetColliderPointsLocal(bbCollider, slot, boundingBoxAttachment, scale);
 						bbCollider.isTrigger = isTrigger;
 						bbCollider.enabled = false;
 						bbCollider.hideFlags = HideFlags.NotEditable;
@@ -181,8 +185,8 @@ namespace Spine.Unity {
 			if (clearStateOnDisable)
 				ClearState();
 
-			if (skeletonRenderer != null)
-				skeletonRenderer.OnRebuild -= HandleRebuild;
+			if (skeletonGraphic != null)
+				skeletonGraphic.OnRebuild -= HandleRebuild;
 		}
 
 		public void ClearState () {
@@ -222,8 +226,8 @@ namespace Spine.Unity {
 		void MatchAttachment (Attachment attachment) {
 			var bbAttachment = attachment as BoundingBoxAttachment;
 
-			if (BoundingBoxFollower.DebugMessages && attachment != null && bbAttachment == null)
-				Debug.LogWarning("BoundingBoxFollower tried to match a non-boundingbox attachment. It will treat it as null.");
+			if (BoundingBoxFollowerGraphic.DebugMessages && attachment != null && bbAttachment == null)
+				Debug.LogWarning("BoundingBoxFollowerGraphic tried to match a non-boundingbox attachment. It will treat it as null.");
 
 			if (currentCollider != null)
 				currentCollider.enabled = false;
@@ -244,7 +248,7 @@ namespace Spine.Unity {
 					currentCollider = null;
 					currentAttachment = bbAttachment;
 					currentAttachmentName = null;
-					if (BoundingBoxFollower.DebugMessages) Debug.LogFormat("Collider for BoundingBoxAttachment named '{0}' was not initialized. It is possibly from a new skin. currentAttachmentName will be null. You may need to call BoundingBoxFollower.Initialize(overwrite: true);", bbAttachment.Name);
+					if (BoundingBoxFollowerGraphic.DebugMessages) Debug.LogFormat("Collider for BoundingBoxAttachment named '{0}' was not initialized. It is possibly from a new skin. currentAttachmentName will be null. You may need to call BoundingBoxFollowerGraphic.Initialize(overwrite: true);", bbAttachment.Name);
 				}
 			}
 		}
